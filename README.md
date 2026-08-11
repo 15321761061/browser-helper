@@ -94,10 +94,10 @@ pnpm package
 
 ```typescript
 // 开发环境
-export const BASE_URL = "https://gtech-tools-uat.dcin-test.digitalyili.com"
+export const BASE_URL = 
 
 // 生产环境
-// export const BASE_URL = "https://gtech-form-assistant.dcin.digitalyili.com"
+// export const BASE_URL = 
 ```
 
 ### 版本检查配置
