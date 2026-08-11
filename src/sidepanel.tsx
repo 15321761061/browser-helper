@@ -1,6 +1,7 @@
 // src/sidepanel.tsx
 import { useState, useEffect } from "react"
 import { track, trackButtonClick, trackFeatureUse, trackPageView } from "~lib/analytics"
+import { BASE_URL } from "~config"
 
 type ExportFormat = "text" | "markdown" | "html"
 type ViewTab = "text" | "selection" | "markdown" | "html"
@@ -19,9 +20,6 @@ interface ExtractedData {
   images: Array<{ src: string; alt: string; width: number; height: number }>
   timestamp: number
 }
- 
-const BASE_URL = "https://gtech-tools-uat.dcin-test.digitalyili.com"
-// const BASE_URL = "https://gtech-form-assistant.dcin.digitalyili.com"
 
 export default function SidePanel() {
   // === 登录状态 ===
@@ -133,7 +131,7 @@ export default function SidePanel() {
   }
 
   const extractCurrentPage = async () => {
-    trackFeatureUse("extract_content", "sidepanel")
+    trackButtonClick("extractContent", "sidepanel")
 
     setResultType("extract")
     setResultStatus("loading")
@@ -514,7 +512,7 @@ export default function SidePanel() {
     }}>
       {/* 标题 */}
       <h1 style={{ fontSize: 18, fontWeight: 700, color: "#1e293b", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
-        <span>📑</span> OA 审批助手
+        <span>📑</span> AI 浏览器插件
       </h1>
 
       {/* ===== 智能执行 ===== */}

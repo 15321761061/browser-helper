@@ -1,6 +1,7 @@
 // src/popup.tsx
 import { useState, useEffect } from "react"
 import { trackPageView, trackButtonClick, trackFeatureUse } from "~lib/analytics"
+import { BASE_URL } from "~config"
 
 export type PanelConfig = {
   showUpdateInfo: boolean
@@ -15,11 +16,8 @@ const DEFAULT_PANEL_CONFIG: PanelConfig = {
   showSmartExecute: true,
   showTools: true,
   showAdmin: true,
-  showQuickPanel: false,
-} 
-
-const BASE_URL = "https://gtech-tools-uat.dcin-test.digitalyili.com"
-// const BASE_URL = "https://gtech-form-assistant.dcin.digitalyili.com"
+  showQuickPanel: true,
+}
 
 export default function Popup() {
   const [updateInfo, setUpdateInfo] = useState<any>(null)
@@ -206,7 +204,7 @@ export default function Popup() {
   }
 
   const extractPageContent = async (retryCount = 0) => {
-    trackFeatureUse("extract_content", "popup")
+    trackButtonClick("extractContent", "popup")
     setExtractStatus("extracting")
     setExtractResult("")
 
@@ -296,13 +294,14 @@ export default function Popup() {
   if (isLoggedIn === false) {
     return (
       <div style={{
-        width: 320,
+        width: 360,
         padding: "32px 24px 16px",
         fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         textAlign: "center",
+        boxSizing: "border-box"
       }}>
         <div style={{ fontSize: 20, fontWeight: 700, color: "#1e293b", marginBottom: 12 }}>
           未登录
@@ -415,13 +414,14 @@ export default function Popup() {
   if (authChecking || isLoggedIn === null) {
     return (
       <div style={{
-        width: 320,
+        width: 360,
         padding: "48px 24px",
         fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         textAlign: "center",
+        boxSizing: "border-box"
       }}>
         <div style={{
           width: 24,
@@ -439,10 +439,10 @@ export default function Popup() {
 
   // 已登录：正常功能界面
   return (
-    <div style={{ width: 320, padding: "8px 12px 10px", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}>
+    <div style={{ width: 360, padding: "8px 12px 10px", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", boxSizing: "border-box" }}>
       {/* 标题栏 */}
       <h2 style={{ fontSize: 15, fontWeight: 700, color: "#1e293b", margin: "0 0 10px 0" }}>
-        🔧 OA 审批助手
+        🔧 AI 浏览器插件
       </h2>
 
       {/* === 更新提示 === */}
@@ -489,6 +489,19 @@ export default function Popup() {
                   稍后提醒
                 </button>
               )}
+              <button
+                onClick={async () => {
+                  const next = { ...panelConfig, showUpdateInfo: false }
+                  await chrome.storage.local.set({ panelConfig: next })
+                  setUpdateInfo(null)
+                  chrome.action.setBadgeText({ text: "" })
+                }}
+                style={{ ...btnSm, color: "#94a3b8" }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = "#64748b" }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = "#94a3b8" }}
+              >
+                不再提示
+              </button>
             </div>
           </div>
         </div>

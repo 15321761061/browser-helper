@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react"
+import { VERSION_CHECK_OPTIONS, ANALYTICS_FLUSH_OPTIONS } from "~config"
 
 export type PanelConfig = {
   showUpdateInfo: boolean
@@ -13,7 +14,7 @@ const DEFAULT_PANEL_CONFIG: PanelConfig = {
   showSmartExecute: true,
   showTools: true,
   showAdmin: true,
-  showQuickPanel: false, // ← 快捷面板默认不展示
+  showQuickPanel: true, // ← 快捷面板默认展示
 }
 
 function OptionsIndex() {
@@ -26,7 +27,9 @@ function OptionsIndex() {
     autoFill: true,
     notifications: true,
     debugMode: false,
-    shortcutKey: "Alt+O"
+    shortcutKey: "Alt+O",
+    versionCheckInterval: 60 * 60 * 1000,  // 默认1小时
+    analyticsFlushInterval: 5 * 60 * 1000, // 默认5分钟
   })
 
   const [panelConfig, setPanelConfig] = useState<PanelConfig>(DEFAULT_PANEL_CONFIG)
@@ -82,7 +85,14 @@ function OptionsIndex() {
   }
 
   const updateSetting = (key: string, value: any) => {
-    setSettings(prev => ({ ...prev, [key]: value }))
+    setSettings(prev => {
+      const next = { ...prev, [key]: value }
+      // 自动保存到 chrome.storage.sync
+      chrome.storage?.sync.set({ oaSettings: next }, () => {
+        console.log(`[Options] 已自动保存设置: ${key}=${value}`)
+      })
+      return next
+    })
   }
 
   const togglePanel = (key: keyof PanelConfig) => {
@@ -123,7 +133,7 @@ function OptionsIndex() {
       <div style={{ width: 260, background: "#fff", borderRight: "1px solid #e2e8f0", padding: "24px 0", position: "fixed", height: "100vh" }}>
         <div style={{ padding: "0 24px 24px", borderBottom: "1px solid #e2e8f0" }}>
           <h1 style={{ fontSize: 20, fontWeight: 700, color: "#1e293b", margin: "0 0 4px 0" }}>
-            🔧 OA 审批助手
+            🔧 AI 浏览器插件
           </h1>
           <p style={{ fontSize: 12, color: "#64748b", margin: 0 }}>扩展设置中心</p>
         </div>
@@ -353,6 +363,46 @@ function OptionsIndex() {
             <p style={{ color: "#64748b", margin: "0 0 32px 0", fontSize: 14 }}>开发者调试相关配置</p>
 
             <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e2e8f0", overflow: "hidden" }}>
+              <SettingRow label="版本检查频率" description="自动检查新版本的时间间隔">
+                <select
+                  value={settings.versionCheckInterval}
+                  onChange={(e) => updateSetting("versionCheckInterval", parseInt(e.target.value))}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 6,
+                    border: "1px solid #cbd5e1",
+                    fontSize: 14,
+                    background: "#fff",
+                    minWidth: 140,
+                    cursor: "pointer"
+                  }}
+                >
+                  {VERSION_CHECK_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </SettingRow>
+
+              <SettingRow label="数据上报间隔" description="匿名使用数据上报的时间间隔">
+                <select
+                  value={settings.analyticsFlushInterval}
+                  onChange={(e) => updateSetting("analyticsFlushInterval", parseInt(e.target.value))}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 6,
+                    border: "1px solid #cbd5e1",
+                    fontSize: 14,
+                    background: "#fff",
+                    minWidth: 140,
+                    cursor: "pointer"
+                  }}
+                >
+                  {ANALYTICS_FLUSH_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </SettingRow>
+
               <SettingRow label="调试模式" description="在控制台输出详细日志">
                 <Toggle checked={settings.debugMode} onChange={(v) => updateSetting("debugMode", v)} />
               </SettingRow>
@@ -379,6 +429,21 @@ function OptionsIndex() {
                 </button>
               </SettingRow>
             </div>
+
+            <div style={{
+              marginTop: 16,
+              padding: 12,
+              background: "#fef3c7",
+              borderRadius: 8,
+              fontSize: 13,
+              color: "#92400e",
+              display: "flex",
+              alignItems: "center",
+              gap: 8
+            }}>
+              <span>⚠️</span>
+              修改版本检查和数据上报设置后，需要重启扩展才能完全生效
+            </div>
           </div>
         )}
 
@@ -391,7 +456,7 @@ function OptionsIndex() {
             <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e2e8f0", padding: 24 }}>
               <div style={{ textAlign: "center", marginBottom: 24 }}>
                 <div style={{ fontSize: 48, marginBottom: 8 }}>🔧</div>
-                <h3 style={{ margin: "0 0 4px 0", color: "#1e293b" }}>OA 审批助手</h3>
+                <h3 style={{ margin: "0 0 4px 0", color: "#1e293b" }}>AI 浏览器插件</h3>
                 <p style={{ color: "#64748b", fontSize: 13, margin: 0 }}>版本 {version} | Powered by Plasmo</p>
               </div>
 

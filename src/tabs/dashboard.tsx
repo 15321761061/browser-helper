@@ -1,8 +1,5 @@
 import { useState, useEffect } from "react"
-
-const BASE_URL = "https://gtech-tools-uat.dcin-test.digitalyili.com"
-// const BASE_URL = "https://gtech-form-assistant.dcin.digitalyili.com"
-
+import { BASE_URL } from "~config"
 
 export default function Dashboard() {
   const [analysis, setAnalysis] = useState<any>(null)
