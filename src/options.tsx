@@ -42,6 +42,31 @@ const API_CONFIG_ITEMS = [
   },
 ]
 
+// AI 模型配置项定义
+const MODEL_CONFIG_ITEMS = [
+  {
+    key: "modelBaseUrl",
+    label: "模型服务地址",
+    description: "AI 模型服务的 API 地址（如 OpenAI、Azure OpenAI 等）",
+    placeholder: "https://api.openai.com/v1",
+    default: DEFAULT_API_CONFIG.modelBaseUrl,
+  },
+  {
+    key: "modelApiKey",
+    label: "模型 API Key",
+    description: "访问 AI 模型服务的认证密钥",
+    placeholder: "sk-xxxxxxxx",
+    default: "",
+  },
+  {
+    key: "modelName",
+    label: "模型名称",
+    description: "使用的模型名称（如 gpt-4、gpt-3.5-turbo 等）",
+    placeholder: "gpt-3.5-turbo",
+    default: DEFAULT_API_CONFIG.modelName,
+  },
+]
+
 function OptionsIndex() {
   const [activeSection, setActiveSection] = useState("general")
   const [saved, setSaved] = useState(false)
@@ -50,6 +75,10 @@ function OptionsIndex() {
     adminBaseUrl: DEFAULT_API_CONFIG.adminBaseUrl,
     versionCheckUrl: "",
     apiKey: "",
+    // AI 模型配置
+    modelBaseUrl: DEFAULT_API_CONFIG.modelBaseUrl,
+    modelApiKey: "",
+    modelName: DEFAULT_API_CONFIG.modelName,
     // 通用设置
     theme: "light",
     autoFill: true,
@@ -332,6 +361,66 @@ function OptionsIndex() {
               ))}
             </div>
 
+            {/* AI 模型配置 */}
+            <h3 style={{ fontSize: 18, fontWeight: 600, color: "#1e293b", margin: "32px 0 16px 0" }}>🤖 AI 模型配置</h3>
+            <p style={{ color: "#64748b", margin: "0 0 16px 0", fontSize: 14 }}>配置智能执行功能使用的 AI 模型服务</p>
+
+            <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e2e8f0", overflow: "hidden" }}>
+              {MODEL_CONFIG_ITEMS.map((item, idx) => (
+                <div
+                  key={item.key}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "16px 24px",
+                    borderBottom: idx < MODEL_CONFIG_ITEMS.length - 1 ? "1px solid #f1f5f9" : undefined,
+                  }}
+                >
+                  <div style={{ flex: 1, marginRight: 16 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "#1e293b", marginBottom: 4 }}>{item.label}</div>
+                    <div style={{ fontSize: 12, color: "#64748b" }}>{item.description}</div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <input
+                      type={item.key === "modelApiKey" ? "password" : "text"}
+                      placeholder={item.placeholder}
+                      value={settings[item.key as keyof typeof settings] as string}
+                      onChange={(e) => updateSetting(item.key, e.target.value)}
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: 6,
+                        border: "1px solid #cbd5e1",
+                        fontSize: 13,
+                        width: 280,
+                        fontFamily: item.key === "modelApiKey" ? "monospace" : "inherit",
+                      }}
+                    />
+                    {item.default && (
+                      <button
+                        onClick={() => updateSetting(item.key, item.default)}
+                        title="重置为默认值"
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: 6,
+                          border: "1px solid #e2e8f0",
+                          background: "#fff",
+                          color: "#64748b",
+                          fontSize: 11,
+                          cursor: "pointer",
+                          whiteSpace: "nowrap",
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#2563eb"; e.currentTarget.style.color = "#2563eb" }}
+                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e2e8f0"; e.currentTarget.style.color = "#64748b" }}
+                      >
+                        重置
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
             {/* 快捷操作 */}
             <div style={{ marginTop: 16, display: "flex", gap: 12 }}>
               <button
@@ -340,6 +429,9 @@ function OptionsIndex() {
                     adminBaseUrl: DEFAULT_API_CONFIG.adminBaseUrl,
                     versionCheckUrl: "",
                     apiKey: "",
+                    modelBaseUrl: DEFAULT_API_CONFIG.modelBaseUrl,
+                    modelApiKey: "",
+                    modelName: DEFAULT_API_CONFIG.modelName,
                   }
                   setSettings(prev => ({ ...prev, ...resetSettings }))
                   chrome.storage?.sync.set({ oaSettings: { ...settings, ...resetSettings } }, () => {

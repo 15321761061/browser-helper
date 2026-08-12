@@ -17,6 +17,13 @@ export interface ApiConfig {
   versionCheckUrl: string
   // API Key（可选）
   apiKey: string
+  // AI 模型配置
+  // 模型服务地址（如 OpenAI、Azure OpenAI 等）
+  modelBaseUrl: string
+  // 模型 API Key
+  modelApiKey: string
+  // 模型名称（如 gpt-4、gpt-3.5-turbo 等）
+  modelName: string
 }
 
 /**
@@ -26,6 +33,9 @@ export const DEFAULT_API_CONFIG: ApiConfig = {
   adminBaseUrl: DEFAULT_BASE_URL,
   versionCheckUrl: "",
   apiKey: "",
+  modelBaseUrl: "",
+  modelApiKey: "",
+  modelName: "gpt-3.5-turbo",
 }
 
 /**
@@ -40,6 +50,9 @@ export async function getApiConfig(): Promise<ApiConfig> {
       adminBaseUrl: settings.adminBaseUrl || DEFAULT_API_CONFIG.adminBaseUrl,
       versionCheckUrl: settings.versionCheckUrl || "",
       apiKey: settings.apiKey || "",
+      modelBaseUrl: settings.modelBaseUrl || "",
+      modelApiKey: settings.modelApiKey || "",
+      modelName: settings.modelName || DEFAULT_API_CONFIG.modelName,
     }
   } catch (err) {
     console.error("[Config] 读取 API 配置失败:", err)
@@ -53,6 +66,22 @@ export async function getApiConfig(): Promise<ApiConfig> {
 export async function getAdminBaseUrl(): Promise<string> {
   const config = await getApiConfig()
   return config.adminBaseUrl
+}
+
+/**
+ * 获取模型配置
+ */
+export async function getModelConfig(): Promise<{
+  modelBaseUrl: string
+  modelApiKey: string
+  modelName: string
+}> {
+  const config = await getApiConfig()
+  return {
+    modelBaseUrl: config.modelBaseUrl,
+    modelApiKey: config.modelApiKey,
+    modelName: config.modelName,
+  }
 }
 
 /**

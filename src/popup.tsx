@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react"
 import { trackPageView, trackButtonClick, trackFeatureUse } from "~lib/analytics"
 import { getAdminBaseUrl, API_ENDPOINTS } from "~config"
+import { smartExecute, detectScenario, type SmartExecuteConfig } from "~lib/smartExecute"
 
 export type PanelConfig = {
   showUpdateInfo: boolean
@@ -261,14 +262,56 @@ export default function Popup() {
     trackButtonClick("executeOption", "popup", { option: selectedOption })
     setExecutionStatus("executing")
     setExecutionResult("")
+
     try {
-      await new Promise((resolve) => setTimeout(resolve, 800))
-      setExecutionStatus("done")
-      setExecutionResult(`已提取「OA审批单」共 1,240 字，识别到 3 个待填字段`)
-      setTimeout(() => setExecutionStatus("idle"), 3000)
+      // 找到选中的配置
+      const selectedConfig = configs.find(cfg => cfg.id === selectedOption)
+      if (!selectedConfig) {
+        setExecutionStatus("error")
+        setExecutionResult("未找到选中的配置")
+        return
+      }
+
+      // 判断场景类型
+      const scenario = detectScenario(selectedConfig.value)
+      const scenarioText = scenario === "dify" ? "Dify 工作流" : "AI 模型"
+
+      setExecutionResult(`正在调用 ${scenarioText}...`)
+
+      // 执行智能调用
+      const result = await smartExecute(selectedConfig as SmartExecuteConfig)
+
+      if (result.success) {
+        setExecutionStatus("done")
+
+        // 格式化显示结果
+        let displayResult = ""
+        if (result.data) {
+          // 如果是 Dify 返回的结果
+          if (result.data.data?.outputs) {
+            displayResult = `执行成功\n${JSON.stringify(result.data.data.outputs, null, 2)}`
+          } else if (result.data.data?.answer) {
+            displayResult = result.data.data.answer
+          } else if (typeof result.data === "string") {
+            displayResult = result.data
+          } else {
+            displayResult = JSON.stringify(result.data, null, 2)
+          }
+        } else {
+          displayResult = "执行成功"
+        }
+
+        setExecutionResult(displayResult)
+        trackFeatureUse("smartExecute", "popup", { scenario, success: true })
+      } else {
+        setExecutionStatus("error")
+        setExecutionResult(result.error || "执行失败")
+        trackFeatureUse("smartExecute", "popup", { scenario, success: false })
+      }
     } catch (err: any) {
       setExecutionStatus("error")
       setExecutionResult("执行失败：" + (err.message || "未知错误"))
+      trackFeatureUse("smartExecute", "popup", { success: false })
     }
   }
 
@@ -787,7 +830,12 @@ export default function Popup() {
             color: executionStatus === "error" ? "#dc2626" : executionStatus === "done" ? "#059669" : "#94a3b8",
             lineHeight: 1.5,
             transition: "all 0.15s",
-            minHeight: 28
+            minHeight: 28,
+            maxHeight: 200,
+            overflowY: "auto",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            fontFamily: executionStatus === "done" && executionResult.includes("\n") ? "monospace, Consolas, 'Courier New'" : "inherit"
           }}>
             {executionStatus !== "idle" ? (
               executionResult
