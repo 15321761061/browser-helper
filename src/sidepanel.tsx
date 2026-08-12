@@ -1,7 +1,7 @@
 // src/sidepanel.tsx
 import { useState, useEffect } from "react"
 import { track, trackButtonClick, trackFeatureUse, trackPageView } from "~lib/analytics"
-import { BASE_URL } from "~config"
+import { getAdminBaseUrl, API_ENDPOINTS } from "~config"
 
 type ExportFormat = "text" | "markdown" | "html"
 type ViewTab = "text" | "selection" | "markdown" | "html"
@@ -22,6 +22,10 @@ interface ExtractedData {
 }
 
 export default function SidePanel() {
+  // === API 配置 ===
+  const [baseUrl, setBaseUrl] = useState<string>("")
+  const [configIniting, setConfigIniting] = useState(true)
+
   // === 登录状态 ===
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null)
   const [authChecking, setAuthChecking] = useState(true)
@@ -45,13 +49,23 @@ export default function SidePanel() {
 
   useEffect(() => {
     trackPageView("sidepanel")
-    checkAuth()
+    // 获取配置的 API 地址
+    getAdminBaseUrl().then(url => {
+      setBaseUrl(url)
+      setConfigIniting(false)
+      if (url) {
+        checkAuth(url)
+      } else {
+        setAuthChecking(false)
+        setIsLoggedIn(null)
+      }
+    })
   }, [])
 
-  const checkAuth = async () => {
+  const checkAuth = async (url: string) => {
     setAuthChecking(true)
     try {
-      const res = await fetch(`${BASE_URL}/api/v1/auth/me`, {
+      const res = await fetch(`${url}${API_ENDPOINTS.authMe}`, {
         credentials: "include",
       })
       if (res.status === 401) {
@@ -65,7 +79,7 @@ export default function SidePanel() {
       const result = await res.json()
       if (result?.data?.user) {
         setIsLoggedIn(true)
-        fetchConfigs()
+        fetchConfigs(url)
       } else {
         setIsLoggedIn(false)
       }
@@ -76,11 +90,11 @@ export default function SidePanel() {
     }
   }
 
-  const fetchConfigs = async () => {
+  const fetchConfigs = async (url: string) => {
     setConfigLoading(true)
     setConfigError("")
     try {
-      const res = await fetch(`${BASE_URL}/api/v1/configs/mine`, {
+      const res = await fetch(`${url}${API_ENDPOINTS.configsMine}`, {
         credentials: "include",
       })
       if (res.status === 401) {
@@ -102,7 +116,11 @@ export default function SidePanel() {
   }
 
   const goLogin = () => {
-    chrome.tabs.create({ url: `${BASE_URL}/login` })
+    if (!baseUrl) {
+      // 不应该到达这里，因为未配置时会显示配置界面
+      return
+    }
+    chrome.tabs.create({ url: `${baseUrl}${API_ENDPOINTS.login}` })
   }
 
   const handleExecute = async () => {
@@ -398,6 +416,85 @@ export default function SidePanel() {
   const resultBorder = resultStatus === "error" ? "#fecaca" : resultStatus === "done" ? "#bbf7d0" : "#e2e8f0"
   const resultColor = resultStatus === "error" ? "#dc2626" : resultStatus === "done" ? "#059669" : "#94a3b8"
 
+  // ===== 配置加载中 =====
+  if (configIniting) {
+    return (
+      <div style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        height: "100vh",
+        fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        background: "#f5f7fa",
+      }}>
+        <div style={{
+          width: 24,
+          height: 24,
+          border: "2px solid #e2e8f0",
+          borderTopColor: "#8b5cf6",
+          borderRadius: "50%",
+          animation: "spin 0.8s linear infinite",
+          marginBottom: 12,
+        }} />
+        <div style={{ fontSize: 13, color: "#64748b" }}>正在加载配置...</div>
+      </div>
+    )
+  }
+
+  // ===== 未配置后台管理地址 =====
+  if (!baseUrl) {
+    return (
+      <div style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        height: "100vh",
+        padding: "32px 24px",
+        fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        textAlign: "center",
+        background: "#f5f7fa",
+      }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>⚙️</div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: "#1e293b", marginBottom: 8 }}>
+          请先配置服务地址
+        </div>
+        <p style={{
+          fontSize: 13,
+          color: "#64748b",
+          margin: "0 0 24px 0",
+          lineHeight: 1.6,
+          maxWidth: 260,
+        }}>
+          请在设置中配置后台管理服务地址，配置后即可使用全部功能
+        </p>
+
+        <button
+          onClick={() => chrome.runtime.openOptionsPage()}
+          style={{
+            width: "100%",
+            maxWidth: 200,
+            padding: "11px 0",
+            borderRadius: 8,
+            border: "none",
+            background: "#8b5cf6",
+            color: "#fff",
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: "pointer",
+            marginBottom: 12,
+            transition: "background 0.15s",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "#7c3aed" }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "#8b5cf6" }}
+        >
+          ⚙️ 打开设置
+        </button>
+      </div>
+    )
+  }
+
   // ===== 未登录界面 =====
   if (isLoggedIn === false) {
     return (
@@ -449,7 +546,7 @@ export default function SidePanel() {
         </button>
 
         <button
-          onClick={checkAuth}
+          onClick={() => baseUrl && checkAuth(baseUrl)}
           style={{
             width: "100%",
             maxWidth: 200,
