@@ -41,6 +41,9 @@ export default function Popup() {
 
   // API 基础地址（从配置读取）
   const [baseUrl, setBaseUrl] = useState<string>("")
+  const [configIniting, setConfigIniting] = useState(true)  // 配置加载中
+  const [tempAdminUrl, setTempAdminUrl] = useState<string>("")  // 临时输入的地址
+  const [savingUrl, setSavingUrl] = useState(false)  // 保存中
 
   useEffect(() => {
     trackPageView("popup")
@@ -51,8 +54,14 @@ export default function Popup() {
     // 获取配置的 API 地址
     getAdminBaseUrl().then(url => {
       setBaseUrl(url)
+      setConfigIniting(false)
       // 获取到地址后再检查登录状态
-      checkAuth(url)
+      if (url) {
+        checkAuth(url)
+      } else {
+        setAuthChecking(false)
+        setIsLoggedIn(null)
+      }
     })
 
     chrome.runtime.sendMessage({ action: "check_version" }, () => {
@@ -140,6 +149,45 @@ export default function Popup() {
     }
   }
 
+  // 保存后台管理地址
+  const saveAdminUrl = async () => {
+    const url = tempAdminUrl.trim()
+    if (!url) {
+      return
+    }
+
+    // 简单验证 URL 格式
+    try {
+      new URL(url)
+    } catch {
+      alert("请输入有效的 URL 地址，例如：https://admin.example.com")
+      return
+    }
+
+    setSavingUrl(true)
+    try {
+      // 读取现有设置
+      const result = await chrome.storage.sync.get(["oaSettings"])
+      const settings = result.oaSettings || {}
+
+      // 更新设置
+      const newSettings = { ...settings, adminBaseUrl: url }
+      await chrome.storage.sync.set({ oaSettings: newSettings })
+
+      // 更新本地状态
+      setBaseUrl(url)
+      setTempAdminUrl("")
+
+      // 检查登录状态
+      checkAuth(url)
+    } catch (err) {
+      console.error("[Popup] 保存配置失败:", err)
+      alert("保存失败，请重试")
+    } finally {
+      setSavingUrl(false)
+    }
+  }
+
   const dismissUpdate = async () => {
     await chrome.storage.local.remove(["updateInfo"])
     chrome.action.setBadgeText({ text: "" })
@@ -162,10 +210,7 @@ export default function Popup() {
 
   const goLogin = () => {
     if (!baseUrl) {
-      alert("请先在设置中配置后台管理地址")
-      chrome.storage.local.set({ optionsActiveSection: "api" }, () => {
-        chrome.runtime.openOptionsPage()
-      })
+      // 不应该到达这里，因为未配置时会显示配置界面
       return
     }
     chrome.tabs.create({ url: `${baseUrl}${API_ENDPOINTS.login}` })
@@ -194,10 +239,7 @@ export default function Popup() {
   const openConfig = () => {
     trackButtonClick("openConfig", "popup")
     if (!baseUrl) {
-      alert("请先在设置中配置后台管理地址")
-      chrome.storage.local.set({ optionsActiveSection: "api" }, () => {
-        chrome.runtime.openOptionsPage()
-      })
+      // 不应该到达这里，因为未配置时会显示配置界面
       return
     }
     chrome.tabs.create({ url: `${baseUrl}${API_ENDPOINTS.configsPage}` })
@@ -207,10 +249,7 @@ export default function Popup() {
   const openHistory = () => {
     trackButtonClick("openHistory", "popup")
     if (!baseUrl) {
-      alert("请先在设置中配置后台管理地址")
-      chrome.storage.local.set({ optionsActiveSection: "api" }, () => {
-        chrome.runtime.openOptionsPage()
-      })
+      // 不应该到达这里，因为未配置时会显示配置界面
       return
     }
     chrome.tabs.create({ url: `${baseUrl}${API_ENDPOINTS.tasksPage}` })
@@ -369,10 +408,7 @@ export default function Popup() {
         <button
           onClick={() => {
             if (!baseUrl) {
-              alert("请先在设置中配置后台管理地址")
-              chrome.storage.local.set({ optionsActiveSection: "api" }, () => {
-                chrome.runtime.openOptionsPage()
-              })
+              // 不应该到达这里，因为未配置时会显示配置界面
               return
             }
             checkAuth(baseUrl)
@@ -443,6 +479,148 @@ export default function Popup() {
             onMouseLeave={(e) => { e.currentTarget.style.color = "#94a3b8" }}
           >
             ⚙️ 设置
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // 配置加载中
+  if (configIniting) {
+    return (
+      <div style={{
+        width: 360,
+        padding: "48px 24px",
+        fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        textAlign: "center",
+        boxSizing: "border-box"
+      }}>
+        <div style={{
+          width: 24,
+          height: 24,
+          border: "2px solid #e2e8f0",
+          borderTopColor: "#2563eb",
+          borderRadius: "50%",
+          animation: "spin 0.8s linear infinite",
+          marginBottom: 12,
+        }} />
+        <div style={{ fontSize: 13, color: "#64748b" }}>正在加载配置...</div>
+      </div>
+    )
+  }
+
+  // 未配置后台管理地址
+  if (!baseUrl) {
+    return (
+      <div style={{
+        width: 360,
+        padding: "24px 20px 16px",
+        fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        textAlign: "center",
+        boxSizing: "border-box"
+      }}>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>⚙️</div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "#1e293b", marginBottom: 8 }}>
+          首次使用，请配置服务地址
+        </div>
+        <p style={{
+          fontSize: 13,
+          color: "#64748b",
+          margin: "0 0 20px 0",
+          lineHeight: 1.6,
+        }}>
+          请输入后台管理服务地址，用于认证、配置管理等功能
+        </p>
+
+        <div style={{ width: "100%", marginBottom: 16 }}>
+          <input
+            type="url"
+            placeholder="https://admin.example.com"
+            value={tempAdminUrl}
+            onChange={(e) => setTempAdminUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                saveAdminUrl()
+              }
+            }}
+            style={{
+              width: "100%",
+              padding: "10px 12px",
+              borderRadius: 8,
+              border: "1px solid #cbd5e1",
+              fontSize: 13,
+              outline: "none",
+              boxSizing: "border-box",
+            }}
+            autoFocus
+          />
+        </div>
+
+        <button
+          onClick={saveAdminUrl}
+          disabled={!tempAdminUrl.trim() || savingUrl}
+          style={{
+            width: "100%",
+            padding: "11px 0",
+            borderRadius: 8,
+            border: "none",
+            background: tempAdminUrl.trim() && !savingUrl ? "#2563eb" : "#94a3b8",
+            color: "#fff",
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: tempAdminUrl.trim() && !savingUrl ? "pointer" : "not-allowed",
+            marginBottom: 12,
+            transition: "background 0.15s",
+          }}
+        >
+          {savingUrl ? "保存中..." : "保存并继续"}
+        </button>
+
+        <button
+          onClick={openOptions}
+          style={{
+            background: "none",
+            border: "none",
+            color: "#64748b",
+            fontSize: 12,
+            cursor: "pointer",
+            textDecoration: "underline",
+          }}
+        >
+          更多配置选项
+        </button>
+
+        {/* 底部版本号 */}
+        <div style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          paddingTop: 20,
+          marginTop: 12,
+        }}>
+          <button
+            onClick={openAbout}
+            style={{
+              fontSize: 10,
+              color: "#cbd5e1",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: "2px 0",
+              borderRadius: 4,
+              transition: "color 0.15s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "#94a3b8" }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "#cbd5e1" }}
+          >
+            v{version}
           </button>
         </div>
       </div>
