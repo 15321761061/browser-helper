@@ -24,10 +24,14 @@ export default function Popup() {
   const [updateInfo, setUpdateInfo] = useState<any>(null)
   const [version, setVersion] = useState<string>("")
   const [selectedOption, setSelectedOption] = useState<string>("")
-  const [executionStatus, setExecutionStatus] = useState<"idle" | "executing" | "done" | "error">("idle")
-  const [executionResult, setExecutionResult] = useState<string>("")
-  const [extractStatus, setExtractStatus] = useState<"idle" | "extracting" | "done" | "error">("idle")
-  const [extractResult, setExtractResult] = useState<string>("")
+
+  // 统一结果展示状态
+  type ResultType = "none" | "execute" | "extract"
+  const [resultType, setResultType] = useState<ResultType>("none")
+  const [resultStatus, setResultStatus] = useState<"idle" | "loading" | "done" | "error">("idle")
+  const [resultContent, setResultContent] = useState<string>("")
+  const [resultTitle, setResultTitle] = useState<string>("")
+  const [copyTip, setCopyTip] = useState<string>("")  // 复制提示
 
   const [panelConfig, setPanelConfig] = useState<PanelConfig>(DEFAULT_PANEL_CONFIG)
 
@@ -260,15 +264,18 @@ export default function Popup() {
   const handleExecute = async () => {
     if (!selectedOption) return
     trackButtonClick("executeOption", "popup", { option: selectedOption })
-    setExecutionStatus("executing")
-    setExecutionResult("")
+
+    setResultType("execute")
+    setResultStatus("loading")
+    setResultTitle("智能执行")
+    setResultContent("")
 
     try {
       // 找到选中的配置
       const selectedConfig = configs.find(cfg => cfg.id === selectedOption)
       if (!selectedConfig) {
-        setExecutionStatus("error")
-        setExecutionResult("未找到选中的配置")
+        setResultStatus("error")
+        setResultContent("未找到选中的配置")
         return
       }
 
@@ -276,13 +283,13 @@ export default function Popup() {
       const scenario = detectScenario(selectedConfig.value)
       const scenarioText = scenario === "dify" ? "Dify 工作流" : "AI 模型"
 
-      setExecutionResult(`正在调用 ${scenarioText}...`)
+      setResultContent(`正在调用 ${scenarioText}...`)
 
       // 执行智能调用
       const result = await smartExecute(selectedConfig as SmartExecuteConfig)
 
       if (result.success) {
-        setExecutionStatus("done")
+        setResultStatus("done")
 
         // 格式化显示结果
         let displayResult = ""
@@ -301,62 +308,95 @@ export default function Popup() {
           displayResult = "执行成功"
         }
 
-        setExecutionResult(displayResult)
+        setResultContent(displayResult)
         trackFeatureUse("smartExecute", "popup", { scenario, success: true })
       } else {
-        setExecutionStatus("error")
-        setExecutionResult(result.error || "执行失败")
+        setResultStatus("error")
+        setResultContent(result.error || "执行失败")
         trackFeatureUse("smartExecute", "popup", { scenario, success: false })
       }
     } catch (err: any) {
-      setExecutionStatus("error")
-      setExecutionResult("执行失败：" + (err.message || "未知错误"))
+      setResultStatus("error")
+      setResultContent("执行失败：" + (err.message || "未知错误"))
       trackFeatureUse("smartExecute", "popup", { success: false })
     }
   }
 
   const extractPageContent = async (retryCount = 0) => {
     trackButtonClick("extractContent", "popup")
-    setExtractStatus("extracting")
-    setExtractResult("")
+
+    setResultType("extract")
+    setResultStatus("loading")
+    setResultTitle("页面提取")
+    setResultContent("")
 
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
       if (!tab?.id) {
-        setExtractStatus("error")
-        setExtractResult("无法获取当前页面")
+        setResultStatus("error")
+        setResultContent("无法获取当前页面")
         return
       }
 
       const url = tab.url || ""
       if (url.startsWith("chrome://") || url.startsWith("chrome-extension://") || url.startsWith("edge://")) {
-        setExtractStatus("error")
-        setExtractResult("Chrome 内部页面不支持提取")
+        setResultStatus("error")
+        setResultContent("Chrome 内部页面不支持提取")
         return
       }
 
       const results = await chrome.tabs.sendMessage(tab.id, { action: "extractContent" })
 
       if (results?.success) {
-        setExtractStatus("done")
-        setExtractResult(`已提取「${results.title}」${results.text?.length || 0} 字`)
-        setTimeout(() => setExtractStatus("idle"), 2000)
+        setResultStatus("done")
+        setResultTitle(results.title || "页面提取")
+        setResultContent(`已提取 ${results.text?.length || 0} 字\n\n${results.text?.slice(0, 500)}${results.text?.length > 500 ? "..." : ""}`)
       } else {
-        setExtractStatus("error")
-        setExtractResult(results?.error || "提取失败")
+        setResultStatus("error")
+        setResultContent(results?.error || "提取失败")
       }
     } catch (err: any) {
       console.error("提取失败:", err)
       if (retryCount < 1 && err.message?.includes("Could not establish connection")) {
-        setExtractResult("正在注入脚本，请重试...")
+        setResultContent("正在注入脚本，请重试...")
         setTimeout(() => extractPageContent(retryCount + 1), 500)
         return
       }
-      setExtractStatus("error")
-      setExtractResult(err.message?.includes("Could not establish connection")
+      setResultStatus("error")
+      setResultContent(err.message?.includes("Could not establish connection")
         ? "页面未加载完成，请刷新后重试"
         : "提取失败: " + (err.message || "未知错误"))
     }
+  }
+
+  // 复制结果
+  const copyResult = async () => {
+    if (!resultContent) return
+    try {
+      await navigator.clipboard.writeText(resultContent)
+      setCopyTip("已复制")
+      setTimeout(() => setCopyTip(""), 1500)
+    } catch (err) {
+      console.error("复制失败:", err)
+    }
+  }
+
+  // 导出结果
+  const exportResult = () => {
+    if (!resultContent) return
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, "-")
+    const filename = `${resultTitle || "result"}_${timestamp}.txt`
+    const blob = new Blob([resultContent], { type: "text/plain;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    setCopyTip("已导出")
+    setTimeout(() => setCopyTip(""), 1500)
   }
 
   const btnBase: React.CSSProperties = {
@@ -774,7 +814,7 @@ export default function Popup() {
             <span style={{ width: 3, height: 12, background: "#8b5cf6", borderRadius: 2, display: "inline-block" }}></span>
             智能执行
           </div>
-          <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+          <div style={{ display: "flex", gap: 8 }}>
             <select
               value={selectedOption}
               onChange={(e) => setSelectedOption(e.target.value)}
@@ -801,51 +841,23 @@ export default function Popup() {
             </select>
             <button
               onClick={handleExecute}
-              disabled={!selectedOption || executionStatus === "executing" || configLoading}
+              disabled={!selectedOption || (resultType === "execute" && resultStatus === "loading") || configLoading}
               style={{
                 ...btnBase,
                 padding: "7px 16px",
                 flex: "none",
-                cursor: !selectedOption || executionStatus === "executing" || configLoading ? "not-allowed" : "pointer",
-                opacity: !selectedOption || executionStatus === "executing" || configLoading ? 0.5 : 1,
-                color: executionStatus === "done" ? "#059669" : executionStatus === "error" ? "#dc2626" : "#475569",
-                borderColor: executionStatus === "done" ? "#bbf7d0" : executionStatus === "error" ? "#fecaca" : "#e2e8f0",
+                cursor: !selectedOption || (resultType === "execute" && resultStatus === "loading") || configLoading ? "not-allowed" : "pointer",
+                opacity: !selectedOption || (resultType === "execute" && resultStatus === "loading") || configLoading ? 0.5 : 1,
               }}
               onMouseEnter={(e) => {
-                if (selectedOption && executionStatus !== "executing" && !configLoading) btnHoverIn(e, "#8b5cf6")
+                if (selectedOption && !(resultType === "execute" && resultStatus === "loading") && !configLoading) btnHoverIn(e, "#8b5cf6")
               }}
               onMouseLeave={(e) => {
-                if (selectedOption && executionStatus !== "executing" && !configLoading) btnHoverOut(e)
+                if (selectedOption && !(resultType === "execute" && resultStatus === "loading") && !configLoading) btnHoverOut(e)
               }}
             >
-              {executionStatus === "executing" ? "⏳" : executionStatus === "done" ? "✅" : "▶"} {executionStatus === "executing" ? "执行中" : executionStatus === "done" ? "完成" : "执行"}
+              {resultType === "execute" && resultStatus === "loading" ? "⏳ 执行中" : "▶ 执行"}
             </button>
-          </div>
-          <div style={{
-            padding: executionResult || configError || configLoading ? "8px 10px" : "6px 10px",
-            background: executionStatus === "error" ? "#fef2f2" : executionStatus === "done" ? "#f0fdf4" : "#f8fafc",
-            borderRadius: 6,
-            border: executionStatus === "error" ? "1px solid #fecaca" : executionStatus === "done" ? "1px solid #bbf7d0" : "1px dashed #e2e8f0",
-            fontSize: 11,
-            color: executionStatus === "error" ? "#dc2626" : executionStatus === "done" ? "#059669" : "#94a3b8",
-            lineHeight: 1.5,
-            transition: "all 0.15s",
-            minHeight: 28,
-            maxHeight: 200,
-            overflowY: "auto",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-            fontFamily: executionStatus === "done" && executionResult.includes("\n") ? "monospace, Consolas, 'Courier New'" : "inherit"
-          }}>
-            {executionStatus !== "idle" ? (
-              executionResult
-            ) : configError ? (
-              configError
-            ) : configLoading ? (
-              "⏳ 正在加载配置列表..."
-            ) : (
-              "选择配置后点击执行，结果将在此展示"
-            )}
           </div>
         </div>
       )}
@@ -860,27 +872,102 @@ export default function Popup() {
           <div style={btnGrid3}>
             <button
               onClick={() => extractPageContent()}
-              disabled={extractStatus === "extracting"}
+              disabled={resultType === "extract" && resultStatus === "loading"}
               style={{
                 ...btnBase,
-                cursor: extractStatus === "extracting" ? "wait" : "pointer",
-                opacity: extractStatus === "extracting" ? 0.6 : 1,
-                color: extractStatus === "done" ? "#059669" : extractStatus === "error" ? "#dc2626" : "#475569",
-                borderColor: extractStatus === "done" ? "#bbf7d0" : extractStatus === "error" ? "#fecaca" : "#e2e8f0",
+                cursor: resultType === "extract" && resultStatus === "loading" ? "wait" : "pointer",
+                opacity: resultType === "extract" && resultStatus === "loading" ? 0.6 : 1,
               }}
-              onMouseEnter={(e) => { if (extractStatus === "idle") btnHoverIn(e, "#f59e0b") }}
-              onMouseLeave={(e) => { if (extractStatus === "idle") btnHoverOut(e) }}
+              onMouseEnter={(e) => { if (!(resultType === "extract" && resultStatus === "loading")) btnHoverIn(e, "#f59e0b") }}
+              onMouseLeave={(e) => { if (!(resultType === "extract" && resultStatus === "loading")) btnHoverOut(e) }}
             >
-              {extractStatus === "extracting" ? "⏳ 提取中..." : extractStatus === "done" ? "✅ 提取成功" : "📄 提取页面内容"}
+              {resultType === "extract" && resultStatus === "loading" ? "⏳ 提取中..." : "📄 提取页面内容"}
             </button>
           </div>
-          {extractResult && (
-            <div style={{ fontSize: 11, color: extractStatus === "done" ? "#059669" : "#dc2626", textAlign: "center", padding: "6px 0 2px 0" }}>
-              {extractResult}
-            </div>
-          )}
         </div>
       )}
+
+      {/* === 结果展示 === */}
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, marginBottom: 6, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ width: 3, height: 12, background: resultType === "execute" ? "#8b5cf6" : resultType === "extract" ? "#f59e0b" : "#94a3b8", borderRadius: 2, display: "inline-block" }}></span>
+            {resultTitle || "结果展示"}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            {copyTip && (
+              <span style={{ fontSize: 10, color: "#059669", fontWeight: 600 }}>{copyTip}</span>
+            )}
+            {resultContent && resultStatus !== "loading" && (
+              <>
+                <button
+                  onClick={copyResult}
+                  title="复制结果"
+                  style={{
+                    padding: "2px 6px",
+                    borderRadius: 4,
+                    border: "1px solid #e2e8f0",
+                    background: "#fff",
+                    color: "#64748b",
+                    fontSize: 10,
+                    cursor: "pointer",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#2563eb"; e.currentTarget.style.color = "#2563eb" }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e2e8f0"; e.currentTarget.style.color = "#64748b" }}
+                >
+                  📋 复制
+                </button>
+                <button
+                  onClick={exportResult}
+                  title="导出为文件"
+                  style={{
+                    padding: "2px 6px",
+                    borderRadius: 4,
+                    border: "1px solid #e2e8f0",
+                    background: "#fff",
+                    color: "#64748b",
+                    fontSize: 10,
+                    cursor: "pointer",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#10b981"; e.currentTarget.style.color = "#10b981" }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e2e8f0"; e.currentTarget.style.color = "#64748b" }}
+                >
+                  📥 导出
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+        <div style={{
+          padding: "8px 10px",
+          background: resultStatus === "error" ? "#fef2f2" : resultStatus === "done" ? "#f0fdf4" : "#f8fafc",
+          borderRadius: 6,
+          border: resultStatus === "error" ? "1px solid #fecaca" : resultStatus === "done" ? "1px solid #bbf7d0" : "1px dashed #e2e8f0",
+          fontSize: 11,
+          color: resultStatus === "error" ? "#dc2626" : resultStatus === "done" ? "#059669" : "#94a3b8",
+          lineHeight: 1.5,
+          maxHeight: 150,
+          minHeight: 60,
+          overflowY: "auto",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          fontFamily: resultStatus === "done" && resultContent.includes("\n") ? "monospace, Consolas, 'Courier New'" : "inherit"
+        }}>
+          {resultStatus === "loading" ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{
+                width: 12,
+                height: 12,
+                border: "2px solid #e2e8f0",
+                borderTopColor: "#8b5cf6",
+                borderRadius: "50%",
+                animation: "spin 0.8s linear infinite",
+              }} />
+              {resultContent || "处理中..."}
+            </div>
+          ) : resultContent || "执行操作后，结果将在此展示"}
+        </div>
+      </div>
 
       {/* === 后台管理 === */}
       {panelConfig.showAdmin && (
