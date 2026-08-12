@@ -1,7 +1,7 @@
 // src/popup.tsx
 import { useState, useEffect } from "react"
 import { trackPageView, trackButtonClick, trackFeatureUse } from "~lib/analytics"
-import { BASE_URL } from "~config"
+import { getAdminBaseUrl, API_ENDPOINTS } from "~config"
 
 export type PanelConfig = {
   showUpdateInfo: boolean
@@ -39,12 +39,21 @@ export default function Popup() {
   const [configLoading, setConfigLoading] = useState(false)
   const [configError, setConfigError] = useState<string>("")
 
+  // API 基础地址（从配置读取）
+  const [baseUrl, setBaseUrl] = useState<string>("")
+
   useEffect(() => {
     trackPageView("popup")
     loadUpdateInfo()
     loadPanelConfig()
     setVersion(chrome.runtime.getManifest().version)
-    checkAuth()
+
+    // 获取配置的 API 地址
+    getAdminBaseUrl().then(url => {
+      setBaseUrl(url)
+      // 获取到地址后再检查登录状态
+      checkAuth(url)
+    })
 
     chrome.runtime.sendMessage({ action: "check_version" }, () => {
       if (chrome.runtime.lastError) {
@@ -65,10 +74,10 @@ export default function Popup() {
   }, [])
 
   // 检测登录状态
-  const checkAuth = async () => {
+  const checkAuth = async (url: string) => {
     setAuthChecking(true)
     try {
-      const res = await fetch(`${BASE_URL}/api/v1/auth/me`, {
+      const res = await fetch(`${url}${API_ENDPOINTS.authMe}`, {
         credentials: "include",
       })
       if (res.status === 401) {
@@ -82,7 +91,7 @@ export default function Popup() {
       const result = await res.json()
       if (result?.data?.user) {
         setIsLoggedIn(true)
-        fetchConfigs()
+        fetchConfigs(url)
       } else {
         setIsLoggedIn(false)
       }
@@ -106,11 +115,11 @@ export default function Popup() {
   }
 
   // 获取后台配置列表
-  const fetchConfigs = async () => {
+  const fetchConfigs = async (url: string) => {
     setConfigLoading(true)
     setConfigError("")
     try {
-      const res = await fetch(`${BASE_URL}/api/v1/configs/mine`, {
+      const res = await fetch(`${url}${API_ENDPOINTS.configsMine}`, {
         credentials: "include",
       })
       if (res.status === 401) {
@@ -152,7 +161,14 @@ export default function Popup() {
   }
 
   const goLogin = () => {
-    chrome.tabs.create({ url: `${BASE_URL}/login` })
+    if (!baseUrl) {
+      alert("请先在设置中配置后台管理地址")
+      chrome.storage.local.set({ optionsActiveSection: "api" }, () => {
+        chrome.runtime.openOptionsPage()
+      })
+      return
+    }
+    chrome.tabs.create({ url: `${baseUrl}${API_ENDPOINTS.login}` })
     window.close()
   }
 
@@ -177,13 +193,27 @@ export default function Popup() {
 
   const openConfig = () => {
     trackButtonClick("openConfig", "popup")
-    chrome.tabs.create({ url: `${BASE_URL}/configs` })
+    if (!baseUrl) {
+      alert("请先在设置中配置后台管理地址")
+      chrome.storage.local.set({ optionsActiveSection: "api" }, () => {
+        chrome.runtime.openOptionsPage()
+      })
+      return
+    }
+    chrome.tabs.create({ url: `${baseUrl}${API_ENDPOINTS.configsPage}` })
     window.close()
   }
 
   const openHistory = () => {
     trackButtonClick("openHistory", "popup")
-    chrome.tabs.create({ url: `${BASE_URL}/tasks` })
+    if (!baseUrl) {
+      alert("请先在设置中配置后台管理地址")
+      chrome.storage.local.set({ optionsActiveSection: "api" }, () => {
+        chrome.runtime.openOptionsPage()
+      })
+      return
+    }
+    chrome.tabs.create({ url: `${baseUrl}${API_ENDPOINTS.tasksPage}` })
     window.close()
   }
 
@@ -337,7 +367,16 @@ export default function Popup() {
         </button>
 
         <button
-          onClick={checkAuth}
+          onClick={() => {
+            if (!baseUrl) {
+              alert("请先在设置中配置后台管理地址")
+              chrome.storage.local.set({ optionsActiveSection: "api" }, () => {
+                chrome.runtime.openOptionsPage()
+              })
+              return
+            }
+            checkAuth(baseUrl)
+          }}
           style={{
             width: "100%",
             padding: "11px 0",

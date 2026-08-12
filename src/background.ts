@@ -1,6 +1,6 @@
 // src/background.ts
 import { flush, track } from "~lib/analytics"
-import { VERSION_CHECK_URL, BASE_URL, getVersionCheckInterval, getAnalyticsFlushInterval } from "~config"
+import { getVersionCheckUrl, getAdminBaseUrl, getVersionCheckInterval, getAnalyticsFlushInterval } from "~config"
 
 // ========== 定时器管理 ==========
 let versionCheckAlarmName = "version-check"
@@ -47,10 +47,13 @@ export async function checkVersion() {
     const manifest = chrome.runtime.getManifest()
     const currentVersion = manifest.version
 
-    console.log("[VersionCheck] 开始检查，当前版本:", currentVersion)
-    console.log("[VersionCheck] 请求地址:", VERSION_CHECK_URL)
+    // 获取可配置的版本检查 URL
+    const versionCheckUrl = await getVersionCheckUrl()
 
-    const res = await fetch(VERSION_CHECK_URL)
+    console.log("[VersionCheck] 开始检查，当前版本:", currentVersion)
+    console.log("[VersionCheck] 请求地址:", versionCheckUrl)
+
+    const res = await fetch(versionCheckUrl)
     if (!res.ok) {
       console.warn("[VersionCheck] 接口返回非200:", res.status)
       return
@@ -193,12 +196,12 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 })
 
 // ========== 点击通知按钮 ==========
-chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
+chrome.notifications.onButtonClicked.addListener(async (notificationId, buttonIndex) => {
   if (notificationId === "update-available" && buttonIndex === 0) {
-    chrome.storage.local.get(["updateInfo"], (r) => {
-      const url = r.updateInfo?.downloadUrl || BASE_URL
-      chrome.tabs.create({ url })
-    })
+    const r = await chrome.storage.local.get(["updateInfo"])
+    const baseUrl = await getAdminBaseUrl()
+    const url = r.updateInfo?.downloadUrl || baseUrl
+    chrome.tabs.create({ url })
   }
 })
 

@@ -2,17 +2,83 @@
 // 统一配置管理
 
 /**
- * API 基础地址
- * 开发环境：https://gtech-tools-uat.dcin-test.digitalyili.com
- * 生产环境：https://gtech-form-assistant.dcin.digitalyili.com
+ * 默认 API 基础地址
+ * 用户需要在设置中心配置后台管理地址
  */
-export const BASE_URL = "https://gtech-tools-uat.dcin-test.digitalyili.com"
-// export const BASE_URL = "https://gtech-form-assistant.dcin.digitalyili.com"
+export const DEFAULT_BASE_URL = ""
 
 /**
- * 版本检查接口
+ * API 配置类型定义
  */
-export const VERSION_CHECK_URL = `${BASE_URL}/api/plugin/check-version?pluginName=oa-helper`
+export interface ApiConfig {
+  // 后台管理服务地址
+  adminBaseUrl: string
+  // 版本检查服务地址（可选，默认使用 adminBaseUrl）
+  versionCheckUrl: string
+  // API Key（可选）
+  apiKey: string
+}
+
+/**
+ * 默认 API 配置
+ */
+export const DEFAULT_API_CONFIG: ApiConfig = {
+  adminBaseUrl: DEFAULT_BASE_URL,
+  versionCheckUrl: "",
+  apiKey: "",
+}
+
+/**
+ * 获取 API 配置（从用户配置读取）
+ */
+export async function getApiConfig(): Promise<ApiConfig> {
+  try {
+    const result = await chrome.storage.sync.get(["oaSettings"])
+    const settings = result.oaSettings || {}
+
+    return {
+      adminBaseUrl: settings.adminBaseUrl || DEFAULT_API_CONFIG.adminBaseUrl,
+      versionCheckUrl: settings.versionCheckUrl || "",
+      apiKey: settings.apiKey || "",
+    }
+  } catch (err) {
+    console.error("[Config] 读取 API 配置失败:", err)
+    return DEFAULT_API_CONFIG
+  }
+}
+
+/**
+ * 获取后台管理基础地址
+ */
+export async function getAdminBaseUrl(): Promise<string> {
+  const config = await getApiConfig()
+  return config.adminBaseUrl
+}
+
+/**
+ * 获取版本检查 URL
+ * 如果用户配置了单独的版本检查地址，则使用该地址
+ * 否则使用后台管理地址拼接默认路径
+ */
+export async function getVersionCheckUrl(): Promise<string> {
+  const config = await getApiConfig()
+  if (config.versionCheckUrl) {
+    return config.versionCheckUrl
+  }
+  return `${config.adminBaseUrl}/api/plugin/check-version?pluginName=oa-helper`
+}
+
+/**
+ * 向后兼容：导出 BASE_URL（同步版本，用于初始化等场景）
+ * @deprecated 请使用 getAdminBaseUrl() 获取可配置的地址
+ */
+export const BASE_URL = DEFAULT_BASE_URL
+
+/**
+ * 向后兼容：导出版本检查 URL（同步版本）
+ * @deprecated 请使用 getVersionCheckUrl() 获取可配置的地址
+ */
+export const VERSION_CHECK_URL = `${DEFAULT_BASE_URL}/api/plugin/check-version?pluginName=oa-helper`
 
 /**
  * 默认配置值
@@ -69,4 +135,33 @@ export async function getAnalyticsFlushInterval(): Promise<number> {
     console.error("[Config] 读取上报间隔配置失败:", err)
     return DEFAULT_CONFIG.analyticsFlushInterval
   }
+}
+
+/**
+ * API 端点路径配置
+ * 这些路径会与 adminBaseUrl 拼接使用
+ */
+export const API_ENDPOINTS = {
+  // 认证相关
+  authMe: "/api/v1/auth/me",
+  login: "/login",
+
+  // 配置管理
+  configsMine: "/api/v1/configs/mine",
+  configsPage: "/configs",
+
+  // 任务管理
+  tasksPage: "/tasks",
+
+  // 版本检查
+  versionCheck: "/api/plugin/check-version?pluginName=oa-helper",
+}
+
+/**
+ * 获取完整的 API URL
+ * @param endpoint 端点路径
+ */
+export async function getApiUrl(endpoint: string): Promise<string> {
+  const baseUrl = await getAdminBaseUrl()
+  return `${baseUrl}${endpoint}`
 }
