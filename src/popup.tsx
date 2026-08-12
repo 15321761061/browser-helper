@@ -675,16 +675,15 @@ export default function Popup() {
       <div style={{
         display: "flex",
         alignItems: "center",
+        justifyContent: "center",
         paddingTop: 8,
-        borderTop: "1px solid #f1f5f9"
+        borderTop: "1px solid #f1f5f9",
+        position: "relative"
       }}>
-        <div style={{ flex: 1 }} />
         <button
           onClick={openAbout}
           title="查看关于"
           style={{
-            flex: 1,
-            textAlign: "center",
             fontSize: 10,
             color: "#cbd5e1",
             background: "none",
@@ -699,26 +698,28 @@ export default function Popup() {
         >
           v{version}
         </button>
-        <button
-          onClick={openPanelSettings}
-          title="面板设置"
-          style={{
-            flex: 1,
-            textAlign: "right",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            fontSize: 11,
-            color: "#94a3b8",
-            padding: "2px 0",
-            borderRadius: 4,
-            transition: "color 0.15s",
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = "#2563eb" }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = "#94a3b8" }}
-        >
-          ⚙️ 设置
-        </button>
+        {!panelConfig.showQuickPanel && (
+          <button
+            onClick={openPanelSettings}
+            title="面板设置"
+            style={{
+              position: "absolute",
+              right: 0,
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              fontSize: 11,
+              color: "#94a3b8",
+              padding: "2px 0",
+              borderRadius: 4,
+              transition: "color 0.15s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "#2563eb" }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "#94a3b8" }}
+          >
+            ⚙️ 设置
+          </button>
+        )}
       </div>
     </div>
   )
