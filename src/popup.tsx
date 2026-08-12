@@ -32,6 +32,7 @@ export default function Popup() {
   const [resultContent, setResultContent] = useState<string>("")
   const [resultTitle, setResultTitle] = useState<string>("")
   const [copyTip, setCopyTip] = useState<string>("")  // 复制提示
+  const [currentConfig, setCurrentConfig] = useState<{ id: string; description: string } | null>(null)  // 当前执行的配置
 
   const [panelConfig, setPanelConfig] = useState<PanelConfig>(DEFAULT_PANEL_CONFIG)
 
@@ -183,11 +184,15 @@ export default function Popup() {
       setBaseUrl(url)
       setTempAdminUrl("")
 
+      // 上报保存事件
+      trackFeatureUse("saveAdminUrl", "popup", { success: true })
+
       // 检查登录状态
       checkAuth(url)
     } catch (err) {
       console.error("[Popup] 保存配置失败:", err)
       alert("保存失败，请重试")
+      trackFeatureUse("saveAdminUrl", "popup", { success: false })
     } finally {
       setSavingUrl(false)
     }
@@ -263,7 +268,26 @@ export default function Popup() {
 
   const handleExecute = async () => {
     if (!selectedOption) return
-    trackButtonClick("executeOption", "popup", { option: selectedOption })
+
+    // 找到选中的配置
+    const selectedConfig = configs.find(cfg => cfg.id === selectedOption)
+    if (!selectedConfig) {
+      setResultType("execute")
+      setResultStatus("error")
+      setResultTitle("智能执行")
+      setResultContent("未找到选中的配置")
+      return
+    }
+
+    // 保存当前配置信息
+    setCurrentConfig({ id: selectedConfig.id, description: selectedConfig.description || "" })
+
+    // 上报执行事件
+    trackButtonClick("executeOption", "popup", {
+      configId: selectedConfig.id,
+      configDesc: selectedConfig.description || "",
+      scenario: detectScenario(selectedConfig.value)
+    })
 
     setResultType("execute")
     setResultStatus("loading")
@@ -271,14 +295,6 @@ export default function Popup() {
     setResultContent("")
 
     try {
-      // 找到选中的配置
-      const selectedConfig = configs.find(cfg => cfg.id === selectedOption)
-      if (!selectedConfig) {
-        setResultStatus("error")
-        setResultContent("未找到选中的配置")
-        return
-      }
-
       // 判断场景类型
       const scenario = detectScenario(selectedConfig.value)
       const scenarioText = scenario === "dify" ? "Dify 工作流" : "AI 模型"
@@ -309,16 +325,30 @@ export default function Popup() {
         }
 
         setResultContent(displayResult)
-        trackFeatureUse("smartExecute", "popup", { scenario, success: true })
+        trackFeatureUse("smartExecute", "popup", {
+          configId: selectedConfig.id,
+          configDesc: selectedConfig.description || "",
+          scenario,
+          success: true
+        })
       } else {
         setResultStatus("error")
         setResultContent(result.error || "执行失败")
-        trackFeatureUse("smartExecute", "popup", { scenario, success: false })
+        trackFeatureUse("smartExecute", "popup", {
+          configId: selectedConfig.id,
+          configDesc: selectedConfig.description || "",
+          scenario,
+          success: false
+        })
       }
     } catch (err: any) {
       setResultStatus("error")
       setResultContent("执行失败：" + (err.message || "未知错误"))
-      trackFeatureUse("smartExecute", "popup", { success: false })
+      trackFeatureUse("smartExecute", "popup", {
+        configId: selectedConfig.id,
+        configDesc: selectedConfig.description || "",
+        success: false
+      })
     }
   }
 
@@ -376,6 +406,11 @@ export default function Popup() {
       await navigator.clipboard.writeText(resultContent)
       setCopyTip("已复制")
       setTimeout(() => setCopyTip(""), 1500)
+      trackButtonClick("copyResult", "popup", {
+        type: resultType,
+        configId: currentConfig?.id,
+        configDesc: currentConfig?.description
+      })
     } catch (err) {
       console.error("复制失败:", err)
     }
@@ -397,6 +432,11 @@ export default function Popup() {
     URL.revokeObjectURL(url)
     setCopyTip("已导出")
     setTimeout(() => setCopyTip(""), 1500)
+    trackButtonClick("exportResult", "popup", {
+      type: resultType,
+      configId: currentConfig?.id,
+      configDesc: currentConfig?.description
+    })
   }
 
   const btnBase: React.CSSProperties = {

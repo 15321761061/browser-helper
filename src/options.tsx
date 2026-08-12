@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import { VERSION_CHECK_OPTIONS, ANALYTICS_FLUSH_OPTIONS, DEFAULT_API_CONFIG } from "~config"
+import { trackFeatureUse } from "~lib/analytics"
 
 export type PanelConfig = {
   showUpdateInfo: boolean
@@ -148,6 +149,20 @@ function OptionsIndex() {
       chrome.storage?.sync.set({ oaSettings: next }, () => {
         console.log(`[Options] 已自动保存设置: ${key}=${value}`)
       })
+
+      // 上报埋点（API 配置相关）
+      if (["adminBaseUrl", "versionCheckUrl", "apiKey"].includes(key)) {
+        trackFeatureUse("updateApiConfig", "options", {
+          key,
+          // 对于 URL 类配置，上报是否已填写（不上报具体值，保护隐私）
+          hasValue: !!value,
+          valueLength: value?.length || 0
+        })
+      } else {
+        // 其他配置上报具体值
+        trackFeatureUse("updateSetting", "options", { key, value: String(value) })
+      }
+
       return next
     })
   }
@@ -459,15 +474,19 @@ function OptionsIndex() {
               <button
                 onClick={async () => {
                   const baseUrl = settings.adminBaseUrl || DEFAULT_API_CONFIG.adminBaseUrl
+                  trackFeatureUse("testConnection", "options", { hasUrl: !!baseUrl })
                   try {
                     const res = await fetch(`${baseUrl}/api/v1/auth/me`, { credentials: "include" })
                     if (res.ok) {
                       alert("✅ 连接成功！服务地址可用")
+                      trackFeatureUse("testConnectionResult", "options", { success: true })
                     } else {
                       alert(`⚠️ 服务响应异常: HTTP ${res.status}`)
+                      trackFeatureUse("testConnectionResult", "options", { success: false, status: res.status })
                     }
                   } catch (err: any) {
                     alert(`❌ 连接失败: ${err.message || "网络错误"}`)
+                    trackFeatureUse("testConnectionResult", "options", { success: false, error: err.message })
                   }
                 }}
                 style={{
